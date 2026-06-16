@@ -48,6 +48,11 @@ def instagram_login():
     password  = data.get('password')
     sessionid = data.get('sessionid')
 
+    print("--- LOGIN REQUEST ---")
+    print("user_id:", user_id)
+    print("username:", username)
+    print("sessionid provided:", bool(sessionid))
+
     if not all([user_id, username]):
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
     
