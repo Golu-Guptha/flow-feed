@@ -143,6 +143,15 @@ class InstagramClientManager:
     def _get_session_path(self, user_id):
         return os.path.join(SESSIONS_DIR, f"session_{user_id}.json")
 
+    def _get_session_data(self, session_path):
+        try:
+            with open(session_path, 'r') as f:
+                settings = json.load(f)
+            return json.dumps({'settings': settings})
+        except Exception as e:
+            print(f"⚠️ Failed to read session settings for DB: {e}")
+            return json.dumps({'session_file': session_path})
+
     def _make_challenge_handler(self, user_id):
         """Returns a challenge handler that blocks until submit_challenge_code() is called."""
         def handler(username, choice):
@@ -328,25 +337,32 @@ class InstagramClientManager:
 
             # --- Session is valid — save it and mark connected ---
             # Store the session ID so actions.py can use web-based requests
-            session_data = {
+            cookies_dict = {
                 'sessionid': decoded_sid,
-                'username': username,
-                'web_session': True,  # flag to use web API instead of mobile
+                'ds_user_id': re.search(r'^\d+', decoded_sid).group() if re.search(r'^\d+', decoded_sid) else ''
+            }
+            session_settings = {
+                'cookies': cookies_dict,
+                'web_session': True,
+                'username': username
             }
             with open(session_path, 'w') as f:
-                json.dump({'cookies': {'sessionid': decoded_sid, 'ds_user_id': re.search(r'^\d+', decoded_sid).group() if re.search(r'^\d+', decoded_sid) else ''}, 'web_session': True, 'username': username}, f)
+                json.dump(session_settings, f)
 
             # Store a lightweight client reference
             self._web_sessions = getattr(self, '_web_sessions', {})
             self._web_sessions[user_id] = {
                 'sessionid': decoded_sid,
                 'username': username,
-                'cookies': {'sessionid': decoded_sid},
+                'cookies': cookies_dict,
             }
 
             result = {
                 'success': True,
-                'session_data': json.dumps({'session_file': session_path, 'web_session': True}),
+                'session_data': json.dumps({
+                    'web_session': True,
+                    'settings': session_settings
+                }),
             }
             self._login_results[user_id] = result
             print(f"\U0001f389 [{user_id}] Connected @{username} via Session ID!")
@@ -447,7 +463,7 @@ class InstagramClientManager:
                     print(f"\u2705 [{user_id}] Logged in with saved session for @{username}")
                     result = {
                         'success': True,
-                        'session_data': json.dumps({'session_file': session_path}),
+                        'session_data': self._get_session_data(session_path),
                     }
                     self._login_results[user_id] = result
                     return result
@@ -471,7 +487,7 @@ class InstagramClientManager:
             print(f"\u2705 [{user_id}] Fresh login successful for @{username}")
             result = {
                 'success': True,
-                'session_data': json.dumps({'session_file': session_path}),
+                'session_data': self._get_session_data(session_path),
             }
             self._login_results[user_id] = result
             return result
@@ -564,7 +580,7 @@ class InstagramClientManager:
             print(f"✅ [{user_id}] 2FA verified successfully")
             return {
                 'success': True,
-                'session_data': json.dumps({'session_file': session_path}),
+                'session_data': self._get_session_data(session_path),
             }
         except Exception as e:
             return {'success': False, 'error': f'2FA verification failed: {str(e)}'}
@@ -580,31 +596,49 @@ class InstagramClientManager:
         if user_id in self._web_sessions:
             return DemoClient(self._web_sessions[user_id])
 
-        # Try to load from saved session file
-        session_path = self._get_session_path(user_id)
-        if not os.path.exists(session_path):
-            return None
-
-        try:
-            with open(session_path) as f:
-                saved = json.load(f)
-            if saved.get('web_session'):
-                # Reload web session from file
-                self._web_sessions[user_id] = {
-                    'sessionid': saved['cookies']['sessionid'],
-                    'username': saved.get('username', ''),
-                    'cookies': saved['cookies'],
-                }
-                print(f"✅ [{user_id}] Loaded web session for @{saved.get('username', '')}")
-                return DemoClient(self._web_sessions[user_id])
-        except Exception:
-            pass
-
         # Try standard instagrapi session restore
         session_doc = db.instagramsessions.find_one({
             'userId': ObjectId(user_id),
             'status': 'connected',
         })
+
+        session_path = self._get_session_path(user_id)
+
+        # Restore from MongoDB first if available (makes the worker fully stateless)
+        if session_doc and session_doc.get('sessionData'):
+            try:
+                data = json.loads(session_doc['sessionData'])
+                if isinstance(data, dict) and data.get('settings'):
+                    with open(session_path, 'w') as f:
+                        json.dump(data['settings'], f)
+                    
+                    if data.get('web_session'):
+                        self._web_sessions[user_id] = {
+                            'sessionid': data['settings']['cookies'].get('sessionid'),
+                            'username': session_doc.get('instagramUsername', ''),
+                            'cookies': data['settings']['cookies'],
+                        }
+                        print(f"✅ [{user_id}] Restored web session from DB settings for @{session_doc.get('instagramUsername', '')}")
+                        return DemoClient(self._web_sessions[user_id])
+            except Exception as e:
+                print(f"⚠️ [{user_id}] Failed to restore session from DB: {e}")
+
+        # Try to load from saved session file (fallback)
+        if os.path.exists(session_path):
+            try:
+                with open(session_path) as f:
+                    saved = json.load(f)
+                if saved.get('web_session'):
+                    # Reload web session from file
+                    self._web_sessions[user_id] = {
+                        'sessionid': saved['cookies']['sessionid'],
+                        'username': saved.get('username', ''),
+                        'cookies': saved['cookies'],
+                    }
+                    print(f"✅ [{user_id}] Loaded web session from file for @{saved.get('username', '')}")
+                    return DemoClient(self._web_sessions[user_id])
+            except Exception:
+                pass
 
         if not session_doc:
             return None

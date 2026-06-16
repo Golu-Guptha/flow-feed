@@ -1,7 +1,9 @@
 const express = require('express');
+const jwt = require('jsonwebtoken');
 const { InstagramSession } = require('../models');
 const { authMiddleware } = require('../middleware/auth');
 
+const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-me';
 const router = express.Router();
 
 const WORKER_URL = process.env.WORKER_URL || 'http://localhost:5000';
