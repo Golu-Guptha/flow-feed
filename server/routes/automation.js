@@ -2,7 +2,7 @@ const express = require('express');
 const { AutomationConfig, InstagramSession, Preference } = require('../models');
 const { authMiddleware } = require('../middleware/auth');
 
-const WORKER_URL = process.env.WORKER_URL || 'http://localhost:5000';
+const WORKER_URL = process.env.WORKER_URL || 'https://feedflow-worker-3j6j.onrender.com';
 const router = express.Router();
 
 // POST /api/automation/start

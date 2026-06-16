@@ -6,7 +6,7 @@ const { authMiddleware } = require('../middleware/auth');
 const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-me';
 const router = express.Router();
 
-const WORKER_URL = process.env.WORKER_URL || 'http://localhost:5000';
+const WORKER_URL = process.env.WORKER_URL || 'https://feedflow-worker-3j6j.onrender.com';
 
 // POST /api/instagram/connect — Connect Instagram account
 router.post('/connect', authMiddleware, async (req, res) => {
