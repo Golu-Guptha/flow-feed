@@ -35,6 +35,10 @@ scheduler.start()
 
 # ---- API Bridge (called by Node.js backend) ----
 
+@app.route('/', methods=['GET', 'HEAD'])
+def health_check():
+    return jsonify({'status': 'ok'}), 200
+
 @app.route('/api/instagram/login', methods=['POST'])
 def instagram_login():
     """Login to Instagram in a background thread so we never block Flask."""
