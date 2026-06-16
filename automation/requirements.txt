@@ -1,4 +1,5 @@
 instagrapi==2.1.2
+Pillow>=8.1.1
 pymongo==4.10.1
 python-dotenv==1.0.1
 apscheduler==3.10.4
