@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+.tempmediaStorage/
+brain/
+scratch/
+implementation_plan.md
+task.md
+walkthrough.md
